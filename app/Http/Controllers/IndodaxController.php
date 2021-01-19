@@ -14,11 +14,18 @@ class IndodaxController extends Controller
         $this->indodax = new Indodax;
     }
 
-    public function index()
+    public function summaries()
     {
-        $info = $this->indodax->getInfo();
-        $transaction = $this->indodax->transactionHistory();
-        dd($info, $transaction);
-        return response()->json($info);
+        return response()->json($this->indodax->summaries());
+    }
+
+    public function getInfo()
+    {
+        return response()->json($this->indodax->getInfo());
+    }
+
+    public function trades($pair_id)
+    {
+        return response()->json($this->indodax->trades($pair_id));
     }
 }
