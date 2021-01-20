@@ -3,6 +3,7 @@
 namespace App\Console\Commands;
 
 use App\Indodax\Indodax;
+use Carbon\Carbon;
 use Illuminate\Console\Command;
 
 class yuri extends Command
@@ -54,12 +55,17 @@ class yuri extends Command
         $this->info("Email\t\t: ". $info->email);
         $this->table(['Currency', 'Balance', 'Balance Hold'], $this->balance($info->balance, $info->balance_hold));
         $pair = $this->ask('What you want to trade [pair]: ');
-        $strategy = $this->choice('What is your startegy?',['Follow The King']);
+        $strategy = $this->choice('What is your startegy?',[
+            'Follow The King',
+            'EMA'
+        ]);
 
         $seconds= 5;
         while(true){
             if($strategy == 'Follow The King'){
                 $this->followTheKing($indodax, $pair);
+            } else if($strategy == 'EMA'){
+                $this->EMA($indodax, $pair);
             }
             sleep($seconds);
         }
@@ -110,9 +116,15 @@ class yuri extends Command
         $balance_cur2 = $this->getBalance($pair2);
         $spend = ($balance_cur2 * 0.1);
 
+        $closePrice = $indodax->ticker(str_replace('_', '', $pair))->ticker->last;
         $orders = $indodax->openOrders($pair)->return->orders;
 
         if(!empty($orders)){
+            $submit_time = Carbon::parse((int) $orders[0]->submit_time);
+            if($submit_time->diffInHours(date('d-m-Y H:i:s')) >= 1){
+                $indodax->cancleOrder($pair, $orders[0]->order_id, $orders[0]->type);
+            }
+
             $this->line("No Action.");
             return;
             // return 1; //no action wait until current order done
@@ -124,6 +136,7 @@ class yuri extends Command
                 if($his->status == 'filled'){
                     $currentPosition = $his->type == 'buy' ? 'sell' : 'buy';
                     $last_price = $his->price;
+
                     break;
                 }
             }
@@ -135,25 +148,22 @@ class yuri extends Command
             $currentPosition = 'buy';
         }
 
-
-
         if($currentPosition == 'sell'){
-            if($sellersKing['price'] > $last_price){
-                $indodax->trade('sell', $pair1, $pair2, $sellersKing['price'], $balance_cur1, $spend);
-                $this->info("SELL: " . $pair. "\tPRICE: " . $sellersKing['price'] . "\tAMOUNT: " . $balance_cur1);
+            $price = $closePrice * ( 1 + 0.002 );
+
+            if($price > ($last_price * (1 - 0.002))){
+                $indodax->trade('sell', $pair1, $pair2, $price, $balance_cur1, $spend);
+                $this->info("SELL: " . $pair. "\tPRICE: " . $price . "\tAMOUNT: " . $balance_cur1);
             }
 
             // return 1;
         } else {
-            $indodax->trade('buy', $pair1, $pair2, $buyersKing['price'], $balance_cur1, $spend);
-            $this->info("BUY: " . $pair. "\tPRICE: " . $buyersKing['price'] . "\tAMOUNT: " . $spend);
-
-            // return 1;
+            $price = $closePrice * ( 1 - 0.002 );
+            $trade = $indodax->trade('buy', $pair1, $pair2, $price, $balance_cur1, $spend);
+            $this->info("BUY: " . $pair. "\tPRICE: " . $price . "\tAMOUNT: " . $spend);
         }
-
-        $this->info("No Action");
-        // return 0;
-
+        $this->info('Listenning..');
+        return;
     }
 
     /**
@@ -180,6 +190,7 @@ class yuri extends Command
         return $temp;
     }
 
+
     public function getBalance($currency)
     {
         foreach($this->balance as $balance){
@@ -189,5 +200,19 @@ class yuri extends Command
         }
     }
 
+    public function EMA($indodax, $pair)
+    {
+        dd($indodax->depth(str_replace('_', '', $pair)));
+        $data = [];
+        foreach($indodax->trades(str_replace('_', '', $pair)) as $trade){
+            // dd($trade);
+            $trade->date = date('d-m-Y H:i:s', (int) $trade->date);
+            $data[] = (array) $trade;
+        }
+
+        $this->table(["date", "type", "price", "amount"], $data);
+
+        dd('ada');
+    }
 
 }

@@ -149,7 +149,7 @@ class Indodax
         return Helper::curl($this->endpoint . '/tapi', [
             'method' => 'trade',
             'timestamp' => $timestamp,
-            'recvWindow' => $timestamp,
+            'recvWindow' => time(),
             'pair' => $pair_1 . '_' . $pair_2,
             'type' => $type,
             'price' => $price,
